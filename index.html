@@ -1,0 +1,916 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CryptoMate</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+
+<!-- Firebase SDK (compat v9) -->
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+
+<style>
+/* ═══════════════════════════════════════════
+   BASE
+═══════════════════════════════════════════ */
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0d1117;color:#e6edf3;font-family:'Inter',system-ui,sans-serif;font-size:13px;line-height:1.5;-webkit-font-smoothing:antialiased}
+:root{
+  --green:#3fb950;--red:#f85149;--yellow:#d29922;--blue:#58a6ff;--purple:#bc8cff;
+  --border:#30363d;--card:#161b22;--hover:#21262d;--muted:#8b949e;
+  --green-bg:rgba(63,185,80,.12);--red-bg:rgba(248,81,73,.12);
+}
+input,select,button{font-family:inherit}
+
+/* ═══════════════════════════════════════════
+   LOGIN SCREEN
+═══════════════════════════════════════════ */
+#view-login{
+  min-height:100vh;display:flex;align-items:center;justify-content:center;
+  background:radial-gradient(ellipse at top,#161b22 0%,#0d1117 60%);
+  padding:20px;
+}
+.login-card{
+  background:#161b22;border:1px solid var(--border);border-radius:12px;
+  padding:36px 32px;width:100%;max-width:380px;
+}
+.login-logo{color:var(--blue);font-size:22px;font-weight:700;letter-spacing:-.5px;margin-bottom:6px}
+.login-logo span{color:var(--purple)}
+.login-sub{color:var(--muted);font-size:12px;margin-bottom:28px}
+.field{display:flex;flex-direction:column;gap:5px;margin-bottom:14px}
+.field label{font-size:11px;font-weight:500;color:var(--muted);letter-spacing:.3px;text-transform:uppercase}
+.field input{
+  background:#0d1117;border:1px solid var(--border);color:#e6edf3;
+  padding:10px 12px;border-radius:6px;font-size:13px;transition:border-color .15s;
+}
+.field input:focus{border-color:var(--blue);outline:none}
+.btn-login{
+  width:100%;padding:11px;margin-top:6px;
+  background:var(--blue);color:#fff;border:none;border-radius:6px;
+  font-size:13px;font-weight:600;cursor:pointer;transition:opacity .15s;
+}
+.btn-login:hover{opacity:.85}
+.btn-login:disabled{opacity:.5;cursor:not-allowed}
+.login-err{
+  display:none;margin-top:12px;padding:10px 12px;background:var(--red-bg);
+  border:1px solid rgba(248,81,73,.3);border-radius:6px;font-size:12px;color:var(--red);
+}
+.login-err.show{display:block}
+
+/* ═══════════════════════════════════════════
+   APP SHELL
+═══════════════════════════════════════════ */
+#view-app{display:none}
+
+/* ── Topbar ── */
+.topbar{
+  background:#161b22;border-bottom:1px solid var(--border);padding:10px 20px;
+  display:flex;align-items:center;justify-content:space-between;gap:12px;
+  position:sticky;top:0;z-index:100;
+}
+.logo{color:var(--blue);font-size:15px;font-weight:700;letter-spacing:-.3px;white-space:nowrap}
+.logo span{color:var(--purple)}
+.runners{display:flex;gap:14px;align-items:center;flex-wrap:wrap}
+.svc{display:flex;align-items:center;gap:5px;font-size:11px;font-weight:500;color:var(--muted)}
+.dot{width:7px;height:7px;border-radius:50%;background:var(--muted);flex-shrink:0;transition:background .5s,box-shadow .5s}
+.dot.online{background:var(--green);box-shadow:0 0 6px var(--green);animation:pulse 2.5s ease-in-out infinite}
+.dot.offline{background:var(--red)}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
+.topbar-right{display:flex;align-items:center;gap:12px}
+.topbar-time{font-size:11px;color:var(--muted);white-space:nowrap}
+.btn-signout{
+  padding:5px 12px;border:1px solid var(--border);background:transparent;
+  color:var(--muted);border-radius:5px;font-size:11px;font-weight:500;cursor:pointer;
+  transition:all .15s;white-space:nowrap;
+}
+.btn-signout:hover{border-color:var(--red);color:var(--red)}
+
+/* Runner bar (mobile) */
+.runner-bar{
+  display:none;background:#0d1117;border-bottom:1px solid var(--border);
+  padding:6px 14px;overflow-x:auto;white-space:nowrap;scrollbar-width:none;
+}
+.runner-bar::-webkit-scrollbar{display:none}
+.runner-chip{
+  display:inline-flex;align-items:center;gap:4px;
+  font-size:10px;font-weight:500;color:var(--muted);margin-right:12px;
+}
+.runner-chip .rdot{width:5px;height:5px;border-radius:50%;background:var(--muted)}
+.runner-chip.online{color:var(--green)}
+.runner-chip.online .rdot{background:var(--green);box-shadow:0 0 5px var(--green)}
+
+/* ── Nav ── */
+.nav{
+  background:#161b22;border-bottom:1px solid var(--border);
+  padding:0 20px;display:flex;gap:0;overflow-x:auto;scrollbar-width:none;
+}
+.nav::-webkit-scrollbar{display:none}
+.nav a{
+  padding:10px 14px;color:var(--muted);text-decoration:none;
+  font-size:11px;font-weight:500;letter-spacing:.4px;text-transform:uppercase;
+  border-bottom:2px solid transparent;white-space:nowrap;cursor:pointer;
+  transition:color .15s;
+}
+.nav a.active,.nav a:hover{color:var(--blue);border-bottom-color:var(--blue)}
+
+/* ── Main grid ── */
+.main{padding:14px 20px;display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.full{grid-column:1/-1}
+
+/* ── Card ── */
+.card{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:14px}
+.card-title{
+  color:var(--muted);font-size:10px;font-weight:600;letter-spacing:1.2px;
+  text-transform:uppercase;margin-bottom:12px;padding-bottom:8px;border-bottom:1px solid var(--border);
+}
+
+/* ── Balance ── */
+.balance-big{font-size:28px;font-weight:700;color:#e6edf3;letter-spacing:-.8px}
+.balance-sub{color:var(--muted);font-size:11px;margin-top:4px}
+.stat-row{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:12px}
+.stat{background:#0d1117;padding:9px 10px;border-radius:6px;border:1px solid var(--border)}
+.stat .val{font-size:12px;font-weight:600;color:var(--blue);word-break:break-word}
+.stat .lbl{color:var(--muted);font-size:10px;margin-top:2px}
+
+/* ── Trend MA ── */
+.trend-bar{display:flex;gap:4px;margin-bottom:10px}
+.tc{flex:1;text-align:center;padding:5px 2px;border-radius:5px;font-size:11px;font-weight:600}
+.tc.bull{background:var(--green-bg);color:var(--green)}
+.tc.bear{background:var(--red-bg);color:var(--red)}
+.tc.neutral{background:var(--hover);color:var(--muted)}
+.stat-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.sg{background:#0d1117;padding:9px;border-radius:6px;border:1px solid var(--border)}
+.sg .v{font-size:12px;font-weight:600;color:#e6edf3}.sg .l{color:var(--muted);font-size:10px;margin-top:2px}
+
+/* ── Positions ── */
+.pos-row{
+  display:flex;justify-content:space-between;align-items:center;
+  padding:8px 0;border-bottom:1px solid var(--border);gap:8px;flex-wrap:wrap;
+}
+.pos-row:last-child{border:none;padding-bottom:0}
+.tag{padding:2px 7px;border-radius:4px;font-size:10px;font-weight:700;letter-spacing:.3px;white-space:nowrap}
+.tag.long{background:var(--green-bg);color:var(--green)}.tag.short{background:var(--red-bg);color:var(--red)}
+.pnl-pos{color:var(--green)}.pnl-neg{color:var(--red)}
+.pos-meta{font-size:12px;color:var(--muted)}
+.pos-meta b{color:#e6edf3;font-weight:600}
+.pos-totals{display:flex;gap:24px;padding-top:10px;border-top:1px solid var(--border);margin-top:4px;flex-wrap:wrap}
+.pt .l{font-size:10px;color:var(--muted)}.pt .v{font-size:16px;font-weight:700}
+.pos-empty{color:var(--muted);font-size:12px;padding:10px 0;text-align:center}
+
+/* ── Quick Actions ── */
+.cta-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.btn{
+  padding:8px 10px;border:1px solid var(--border);background:var(--hover);color:#e6edf3;
+  border-radius:6px;cursor:pointer;font-size:11px;font-weight:500;
+  letter-spacing:.2px;transition:all .15s;white-space:nowrap;text-align:center;
+}
+.btn:hover{background:#2d333b;border-color:#484f58}
+.btn:active{transform:scale(.97)}
+.btn.success:hover{background:var(--green-bg);border-color:var(--green);color:var(--green)}
+.btn.danger:hover{background:var(--red-bg);border-color:var(--red);color:var(--red)}
+.btn.primary:hover{background:rgba(88,166,255,.1);border-color:var(--blue);color:var(--blue)}
+.btn.active-on{background:var(--green-bg);border-color:var(--green);color:var(--green)}
+.btn.active-off{background:var(--red-bg);border-color:var(--red);color:var(--red)}
+.btn:disabled{opacity:.4;cursor:not-allowed;transform:none}
+.toast{
+  position:fixed;bottom:20px;right:20px;
+  padding:10px 16px;background:#161b22;border:1px solid var(--border);border-radius:8px;
+  font-size:12px;color:#e6edf3;z-index:999;opacity:0;transition:opacity .3s;pointer-events:none;
+  max-width:280px;
+}
+.toast.show{opacity:1}
+.toast.ok{border-color:var(--green);color:var(--green)}
+.toast.err{border-color:var(--red);color:var(--red)}
+
+/* ── Legs table ── */
+.table-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch}
+table{width:100%;border-collapse:collapse;min-width:560px}
+th{
+  color:var(--muted);text-align:left;padding:6px 8px;border-bottom:1px solid var(--border);
+  font-weight:500;font-size:10px;letter-spacing:.6px;text-transform:uppercase;white-space:nowrap;
+}
+td{padding:7px 8px;border-bottom:1px solid #21262d;color:#e6edf3;font-size:12px}
+tr:hover td{background:var(--hover)}
+tr:last-child td{border:none}
+.no-data{text-align:center;color:var(--muted);padding:20px;font-size:12px}
+
+/* ── Create Leg form ── */
+.form-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.fld{display:flex;flex-direction:column;gap:4px}
+.fld label{color:var(--muted);font-size:10px;font-weight:500;letter-spacing:.4px;text-transform:uppercase}
+.fld input,.fld select{
+  background:#0d1117;border:1px solid var(--border);color:#e6edf3;
+  padding:7px 10px;border-radius:6px;font-size:12px;transition:border-color .15s;
+}
+.fld input:focus,.fld select:focus{border-color:var(--blue);outline:none}
+.btn-exec{
+  width:100%;margin-top:10px;padding:9px;
+  background:var(--green-bg);border:1px solid rgba(63,185,80,.35);color:var(--green);
+  border-radius:6px;cursor:pointer;font-size:12px;font-weight:600;
+  letter-spacing:.3px;transition:all .15s;
+}
+.btn-exec:hover{background:rgba(63,185,80,.2);border-color:var(--green)}
+.btn-exec:disabled{opacity:.4;cursor:not-allowed}
+
+/* ── Status badge ── */
+.status-badge{
+  display:inline-block;padding:2px 7px;border-radius:4px;font-size:10px;font-weight:600;
+  letter-spacing:.3px;
+}
+.sb-on{background:var(--green-bg);color:var(--green);border:1px solid rgba(63,185,80,.25)}
+.sb-off{background:var(--red-bg);color:var(--red);border:1px solid rgba(248,81,73,.25)}
+
+/* ── Create status line ── */
+.create-status{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:12px;padding-bottom:10px;border-bottom:1px solid var(--border)}
+
+/* ── Performance placeholder ── */
+.perf-placeholder{
+  text-align:center;padding:24px;color:var(--muted);font-size:12px;
+  border:1px dashed var(--border);border-radius:6px;
+}
+
+/* ═══════════════════════════════════════════
+   RESPONSIVE — Tablet (≤900px)
+═══════════════════════════════════════════ */
+@media(max-width:900px){
+  .main{grid-template-columns:1fr}
+  .stat-row{grid-template-columns:repeat(2,1fr)}
+  .cta-grid{grid-template-columns:repeat(2,1fr)}
+  .topbar .runners{display:none}
+  .topbar-time{display:none}
+  .runner-bar{display:block}
+}
+
+/* ═══════════════════════════════════════════
+   RESPONSIVE — Mobile (≤600px)
+═══════════════════════════════════════════ */
+@media(max-width:600px){
+  .topbar{padding:10px 14px}
+  .logo{font-size:13px}
+  .nav a{padding:9px 10px;font-size:10px}
+  .main{padding:10px 14px;gap:10px}
+  .card{padding:12px}
+  .balance-big{font-size:22px}
+  .stat-row{gap:6px}
+  .cta-grid{grid-template-columns:1fr 1fr;gap:6px}
+  .cta-grid .btn:nth-child(5){grid-column:1/-1}
+  .form-grid{grid-template-columns:1fr}
+  .trend-bar{gap:3px}
+  .pos-totals{gap:16px}
+  .login-card{padding:28px 20px}
+  .btn-signout span{display:none}
+}
+</style>
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════════
+     LOGIN VIEW
+═══════════════════════════════════════════ -->
+<div id="view-login">
+  <div class="login-card">
+    <div class="login-logo">⚡ Crypto<span>Mate</span></div>
+    <div class="login-sub">BTC/USDT Grid Bot Dashboard</div>
+    <div class="field">
+      <label>Email</label>
+      <input type="email" id="inp-email" placeholder="you@example.com" autocomplete="email">
+    </div>
+    <div class="field">
+      <label>Password</label>
+      <input type="password" id="inp-password" placeholder="••••••••" autocomplete="current-password">
+    </div>
+    <button class="btn-login" id="btn-login" onclick="doLogin()">Sign In</button>
+    <div class="login-err" id="login-err"></div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════
+     DASHBOARD VIEW
+═══════════════════════════════════════════ -->
+<div id="view-app">
+
+  <!-- Top bar -->
+  <div class="topbar">
+    <div class="logo">⚡ Crypto<span>Mate</span></div>
+    <div class="runners" id="runner-status-bar">
+      <div class="svc"><div class="dot" id="dot-fetchtrend"></div><span>FetchTrend</span></div>
+      <div class="svc"><div class="dot" id="dot-legcreation"></div><span>LegCreation</span></div>
+      <div class="svc"><div class="dot" id="dot-legdeletion"></div><span>LegDeletion</span></div>
+      <div class="svc"><div class="dot" id="dot-telegram"></div><span>Telegram</span></div>
+    </div>
+    <div class="topbar-right">
+      <span class="topbar-time" id="topbar-time">—</span>
+      <button class="btn-signout" onclick="doSignOut()">Sign out <span>↩</span></button>
+    </div>
+  </div>
+
+  <!-- Mobile runner chips -->
+  <div class="runner-bar" id="mobile-runners">
+    <span class="runner-chip" id="chip-fetchtrend"><span class="rdot"></span>FetchTrend</span>
+    <span class="runner-chip" id="chip-legcreation"><span class="rdot"></span>LegCreation</span>
+    <span class="runner-chip" id="chip-legdeletion"><span class="rdot"></span>LegDeletion</span>
+    <span class="runner-chip" id="chip-telegram"><span class="rdot"></span>Telegram</span>
+    <span id="mobile-time" style="font-size:10px;color:var(--muted)"></span>
+  </div>
+
+  <!-- Nav -->
+  <div class="nav">
+    <a class="active">Dashboard</a>
+    <a onclick="scrollTo('#legs-card')">Legs</a>
+    <a onclick="scrollTo('#actions-card')">Actions</a>
+    <a onclick="scrollTo('#create-card')">Create</a>
+  </div>
+
+  <div class="main">
+
+    <!-- ── Balance ── -->
+    <div class="card">
+      <div class="card-title">Account</div>
+      <div class="balance-big" id="bal-total">—</div>
+      <div class="balance-sub" id="bal-sub">Available — &nbsp;·&nbsp; Used —</div>
+      <div class="stat-row">
+        <div class="stat"><div class="val" id="stat-trend" style="color:var(--yellow)">—</div><div class="lbl">Trend</div></div>
+        <div class="stat"><div class="val" id="stat-regime" style="color:var(--purple)">—</div><div class="lbl">Regime</div></div>
+        <div class="stat"><div class="val" id="stat-gridstep">—</div><div class="lbl">Grid Step</div></div>
+        <div class="stat"><div class="val" id="stat-bias" style="color:var(--muted)">—</div><div class="lbl">1h Bias</div></div>
+      </div>
+    </div>
+
+    <!-- ── Trend MA ── -->
+    <div class="card">
+      <div class="card-title">Trend MA Array (last 6)</div>
+      <div class="trend-bar" id="trend-cells">
+        <div class="tc neutral">—</div><div class="tc neutral">—</div>
+        <div class="tc neutral">—</div><div class="tc neutral">—</div>
+        <div class="tc neutral">—</div><div class="tc neutral">—</div>
+      </div>
+      <div class="stat-grid">
+        <div class="sg"><div class="v" id="sg-weighted">—</div><div class="l">Weighted</div></div>
+        <div class="sg"><div class="v" id="sg-persist">—</div><div class="l">Persistence</div></div>
+        <div class="sg"><div class="v" id="sg-rsi" style="color:var(--blue)">—</div><div class="l">RSI</div></div>
+        <div class="sg"><div class="v" id="sg-switch">—</div><div class="l">Switch</div></div>
+      </div>
+    </div>
+
+    <!-- ── Positions ── -->
+    <div class="card">
+      <div class="card-title">Positions</div>
+      <div id="positions-body">
+        <div class="pos-empty">Loading…</div>
+      </div>
+    </div>
+
+    <!-- ── Quick Actions ── -->
+    <div class="card" id="actions-card">
+      <div class="card-title">Quick Actions</div>
+      <div class="create-status">
+        <span style="font-size:11px;color:var(--muted)">Create:</span>
+        <span class="status-badge sb-off" id="badge-allow">OFF</span>
+        <span class="status-badge sb-off" id="badge-long">LONG OFF</span>
+        <span class="status-badge sb-off" id="badge-short">SHORT OFF</span>
+      </div>
+      <div class="cta-grid">
+        <button class="btn success" onclick="ctaAllowCreate(true)" title="Set allowtocreate = true">✅ Allow Create</button>
+        <button class="btn danger"  onclick="ctaAllowCreate(false)" title="Set allowtocreate = false">🛑 Stop Create</button>
+        <button class="btn primary" onclick="ctaRebase()" title="Set allowRebaseLegs = true">🔄 Rebase Legs</button>
+        <button class="btn success" onclick="ctaAllowSide('long', true)" title="Enable LONG creation">📈 Allow LONG</button>
+        <button class="btn danger"  onclick="ctaAllowSide('short', true)" title="Enable SHORT creation">📉 Allow SHORT</button>
+        <button class="btn"         onclick="ctaReport()" title="Refresh all data">🔃 Refresh</button>
+      </div>
+    </div>
+
+    <!-- ── Active Legs ── -->
+    <div class="card full" id="legs-card">
+      <div class="card-title" id="legs-title">Active Legs</div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>ID</th><th>Side</th><th>Entry</th><th>Qty</th>
+              <th>SL</th><th>TP</th><th>ROI</th><th>TP Max</th>
+            </tr>
+          </thead>
+          <tbody id="legs-body">
+            <tr><td colspan="8" class="no-data">Loading…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ── Create Leg ── -->
+    <div class="card" id="create-card">
+      <div class="card-title">Create Leg</div>
+      <div class="form-grid">
+        <div class="fld" style="grid-column:1/-1">
+          <label>Side</label>
+          <select id="cr-side"><option value="LONG">LONG</option><option value="SHORT">SHORT</option></select>
+        </div>
+        <div class="fld"><label>Qty (BTC)</label><input type="number" id="cr-qty" value="0.002" step="0.001" min="0.001"></div>
+        <div class="fld"><label>Leverage</label><input type="number" id="cr-lev" value="15" min="1" max="25"></div>
+        <div class="fld"><label>SL %</label><input type="number" id="cr-sl" value="-8" step="0.5"></div>
+        <div class="fld"><label>TP %</label><input type="number" id="cr-tp" value="3.5" step="0.25"></div>
+      </div>
+      <button class="btn-exec" id="btn-exec" onclick="ctaCreateLeg()">🚀 Execute Create Leg</button>
+      <div style="margin-top:8px;font-size:10px;color:var(--muted)">
+        Updates config values, then enables creation for the selected side. Bot creates on next loop.
+      </div>
+    </div>
+
+    <!-- ── Performance ── -->
+    <div class="card">
+      <div class="card-title">Funding &amp; Rates</div>
+      <div class="stat-grid">
+        <div class="sg"><div class="v" id="fund-rate">—</div><div class="l">Funding Rate</div></div>
+        <div class="sg"><div class="v" id="fund-daily">—</div><div class="l">Daily Est.</div></div>
+        <div class="sg"><div class="v" id="fund-mark">—</div><div class="l">Mark Price</div></div>
+        <div class="sg"><div class="v" id="fund-updated">—</div><div class="l">Updated</div></div>
+      </div>
+      <div style="margin-top:10px">
+        <div class="stat-grid">
+          <div class="sg"><div class="v" id="cfg-leg-sl">—</div><div class="l">Leg Force SL%</div></div>
+          <div class="sg"><div class="v" id="cfg-leg-tp">—</div><div class="l">Leg Force TP%</div></div>
+          <div class="sg"><div class="v" id="cfg-lev-long">—</div><div class="l">Lev Long</div></div>
+          <div class="sg"><div class="v" id="cfg-lev-short">—</div><div class="l">Lev Short</div></div>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /main -->
+</div><!-- /view-app -->
+
+<!-- Toast notification -->
+<div class="toast" id="toast"></div>
+
+<!-- ═══════════════════════════════════════════
+     FIREBASE CONFIG — Fill in from Firebase Console
+     Project > Project Settings > Your apps > Web app > Config
+═══════════════════════════════════════════ -->
+<script>
+const FIREBASE_CONFIG = {
+  apiKey:            "REPLACE_WITH_YOUR_API_KEY",
+  authDomain:        "cryptomate-b930e.firebaseapp.com",
+  databaseURL:       "https://cryptomate-b930e-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId:         "cryptomate-b930e",
+  storageBucket:     "cryptomate-b930e.appspot.com",
+  messagingSenderId: "REPLACE_WITH_SENDER_ID",
+  appId:             "REPLACE_WITH_APP_ID",
+};
+
+// ═══════════════════════════════════════════
+// Init Firebase
+// ═══════════════════════════════════════════
+firebase.initializeApp(FIREBASE_CONFIG);
+const auth = firebase.auth();
+const db   = firebase.database();
+
+// ═══════════════════════════════════════════
+// Auth
+// ═══════════════════════════════════════════
+const ALLOWED_EMAIL = 'berlinopotato@gmail.com';
+
+auth.onAuthStateChanged(user => {
+  if (user && user.email === ALLOWED_EMAIL) {
+    showApp();
+  } else {
+    if (user) auth.signOut();   // wrong account
+    showLogin();
+  }
+});
+
+function showLogin() {
+  document.getElementById('view-login').style.display = 'flex';
+  document.getElementById('view-app').style.display   = 'none';
+}
+function showApp() {
+  document.getElementById('view-login').style.display = 'none';
+  document.getElementById('view-app').style.display   = 'block';
+  startListeners();
+  startClock();
+}
+
+async function doLogin() {
+  const email = document.getElementById('inp-email').value.trim();
+  const pass  = document.getElementById('inp-password').value;
+  const errEl = document.getElementById('login-err');
+  const btnEl = document.getElementById('btn-login');
+  errEl.classList.remove('show');
+  btnEl.disabled = true;
+  btnEl.textContent = 'Signing in…';
+  try {
+    await auth.signInWithEmailAndPassword(email, pass);
+  } catch(e) {
+    errEl.textContent = e.message || 'Login failed.';
+    errEl.classList.add('show');
+    btnEl.disabled = false;
+    btnEl.textContent = 'Sign In';
+  }
+}
+
+// Allow Enter key on password field
+document.getElementById('inp-password')?.addEventListener('keydown', e => {
+  if (e.key === 'Enter') doLogin();
+});
+
+function doSignOut() {
+  auth.signOut();
+}
+
+// ═══════════════════════════════════════════
+// Clock
+// ═══════════════════════════════════════════
+function startClock() {
+  function tick() {
+    const now = new Date();
+    const s = now.toLocaleString('en-GB', {
+      day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit', hour12:false
+    });
+    document.getElementById('topbar-time').textContent = s;
+    document.getElementById('mobile-time').textContent = s;
+  }
+  tick();
+  setInterval(tick, 30000);
+}
+
+// ═══════════════════════════════════════════
+// Firebase Listeners
+// ═══════════════════════════════════════════
+const listeners = [];
+
+function startListeners() {
+  // Trend / regime / runners
+  listen('trend/BTCUSDT', snap => {
+    const d = snap.val() || {};
+    renderTrend(d);
+    renderRunners(d);
+    renderFunding(d);
+  });
+
+  // Legs
+  listen('legs/BTCUSDT', snap => {
+    renderLegs(snap.val() || {});
+  });
+
+  // Positions (Binance cached data)
+  listen('positions/BTCUSDT', snap => {
+    renderPositions(snap.val() || {});
+  });
+
+  // Config grid (for CTA badges + form defaults)
+  listen('configmain/configgrid', snap => {
+    renderConfig(snap.val() || {});
+  });
+}
+
+function listen(path, cb) {
+  const ref = db.ref(path);
+  ref.on('value', cb);
+  listeners.push(ref);
+}
+
+// ═══════════════════════════════════════════
+// Render: Trend
+// ═══════════════════════════════════════════
+function renderTrend(d) {
+  const final   = d.trend_ma_final     || '—';
+  const regime  = d.regime_class        || '—';
+  const gridStep= d.grid_step           || '—';
+  const bias    = d.trend_1h_bias       || '—';
+  const weighted= d.trend_ma_weighted   || '—';
+  const persist = d.trend_ma_persistence|| '—';
+  const sw      = d.trend_ma_switch     || '—';
+  const rsi     = d.trend_rsi           != null ? parseFloat(d.trend_rsi).toFixed(1) : '—';
+
+  setTxt('stat-trend',   final);
+  setTxt('stat-regime',  regimeIcon(regime));
+  setTxt('stat-gridstep',gridStep);
+  setTxt('stat-bias',    bias);
+  setTxt('sg-weighted',  weighted);
+  setTxt('sg-persist',   persist);
+  setTxt('sg-rsi',       rsi);
+  setTxt('sg-switch',    sw);
+
+  // Color bias
+  const biasEl = document.getElementById('stat-bias');
+  if (biasEl) biasEl.style.color = bias === 'BULL' ? 'var(--green)' : bias === 'BEAR' ? 'var(--red)' : 'var(--muted)';
+
+  // Color trend
+  const trendEl = document.getElementById('stat-trend');
+  if (trendEl) trendEl.style.color = trendColor(final);
+
+  // Trend MA cells
+  const ma = d.trend_ma;
+  if (Array.isArray(ma)) {
+    const cells = document.getElementById('trend-cells');
+    cells.innerHTML = '';
+    const last6 = ma.slice(-6);
+    last6.forEach(v => {
+      const el = document.createElement('div');
+      el.className = 'tc ' + (v > 0 ? 'bull' : v < 0 ? 'bear' : 'neutral');
+      el.textContent = v > 0 ? '+1' : v < 0 ? '−1' : '0';
+      cells.appendChild(el);
+    });
+  }
+}
+
+function regimeIcon(r) {
+  const icons = {
+    REGIME_Ant:'🐜 Ant', REGIME_Bird:'🕊️ Bird',
+    REGIME_Cat:'🐈 Cat', REGIME_Dog:'🐶 Dog', REGIME_Elephant:'🐘 Elephant'
+  };
+  return icons[r] || r;
+}
+function trendColor(t) {
+  if (!t || t==='—') return 'var(--muted)';
+  if (t.startsWith('BULL')) return 'var(--green)';
+  if (t.startsWith('BEAR')) return 'var(--red)';
+  return 'var(--yellow)';
+}
+
+// ═══════════════════════════════════════════
+// Render: Runner status dots
+// ═══════════════════════════════════════════
+function renderRunners(d) {
+  // ContinueFetching drives FetchTrend; runner others have their own keys
+  setDot('fetchtrend',   d.ContinueFetching          !== false);
+  setDot('legcreation',  d.RnrLegCreation_Continue   !== false);
+  setDot('legdeletion',  d.RnrLegDeletion_Continue   !== false);
+  setDot('telegram',     d.ContinueFetching           !== false);   // proxy
+}
+function setDot(name, online) {
+  const dot  = document.getElementById('dot-' + name);
+  const chip = document.getElementById('chip-' + name);
+  if (dot) {
+    dot.className = 'dot ' + (online ? 'online' : 'offline');
+  }
+  if (chip) {
+    chip.className = 'runner-chip ' + (online ? 'online' : '');
+  }
+}
+
+// ═══════════════════════════════════════════
+// Render: Positions
+// ═══════════════════════════════════════════
+function renderPositions(d) {
+  const body = document.getElementById('positions-body');
+  // Bot stores positions with LONG / SHORT as top-level keys under positions/BTCUSDT
+  // Each has: positionAmt, entryPrice, unRealizedProfit, liquidationPrice, leverage
+  const sides = ['LONG', 'SHORT'];
+  let html = '';
+  let totalUpnl = 0;
+
+  sides.forEach(side => {
+    const p = d[side];
+    if (!p) return;
+    const amt  = parseFloat(p.positionAmt  || p.positionamt  || 0);
+    if (Math.abs(amt) < 0.0001) return;
+
+    const entry = fmt(p.entryPrice || p.entryprice || 0);
+    const liq   = fmt(p.liquidationPrice || p.liquidationprice || 0);
+    const upnl  = parseFloat(p.unRealizedProfit || p.unrealizedprofit || 0);
+    const mark  = parseFloat(p.markPrice || p.markprice || 0);
+    const lev   = p.leverage || '—';
+    const qty   = Math.abs(amt).toFixed(4);
+
+    totalUpnl += upnl;
+    const roiAmt = upnl >= 0 ? `+$${upnl.toFixed(2)}` : `-$${Math.abs(upnl).toFixed(2)}`;
+    const cls    = upnl >= 0 ? 'pnl-pos' : 'pnl-neg';
+
+    html += `
+      <div class="pos-row">
+        <span class="tag ${side.toLowerCase()}">${side}</span>
+        <span class="pos-meta">Entry <b>${entry}</b></span>
+        <span class="pos-meta">Qty <b>${qty}</b></span>
+        <span class="${cls}" style="font-weight:600">${roiAmt}</span>
+        <span class="pos-meta">Liq <b style="color:var(--red)">${liq}</b></span>
+        <span class="pos-meta" style="color:var(--muted)">${lev}x</span>
+      </div>`;
+  });
+
+  if (!html) {
+    html = '<div class="pos-empty">No open positions</div>';
+  } else {
+    const cls = totalUpnl >= 0 ? 'pnl-pos' : 'pnl-neg';
+    const sign = totalUpnl >= 0 ? '+' : '';
+    html += `
+      <div class="pos-totals">
+        <div class="pt"><div class="l">Total uPNL</div>
+          <div class="v ${cls}">${sign}$${totalUpnl.toFixed(2)}</div></div>
+      </div>`;
+  }
+  body.innerHTML = html;
+}
+
+// ═══════════════════════════════════════════
+// Render: Active Legs
+// ═══════════════════════════════════════════
+function renderLegs(d) {
+  const tbody = document.getElementById('legs-body');
+  const legs  = Object.entries(d).filter(([id, v]) =>
+    id !== '7777777' && typeof v === 'object' && v !== null && v.positionSide
+  );
+
+  document.getElementById('legs-title').textContent =
+    `Active Legs (${legs.length})`;
+
+  if (!legs.length) {
+    tbody.innerHTML = '<tr><td colspan="8" class="no-data">No active legs</td></tr>';
+    return;
+  }
+
+  // Sort: LONG first, then SHORT; within each side by entry price
+  legs.sort((a, b) => {
+    const sa = a[1].positionSide, sb = b[1].positionSide;
+    if (sa !== sb) return sa === 'LONG' ? -1 : 1;
+    return parseFloat(a[1].avgPrice||0) - parseFloat(b[1].avgPrice||0);
+  });
+
+  tbody.innerHTML = legs.map(([id, leg]) => {
+    const side = leg.positionSide || '—';
+    const entry= fmt(leg.avgPrice || 0);
+    const qty  = parseFloat(leg.origQty || 0).toFixed(3);
+    const sl   = fmt(leg.targetStopLoss || 0);
+    const tp   = fmt(leg.targetTakeProfit || 0);
+    const roi  = parseFloat(leg.roi || 0);
+    const tpMax= leg.targetTakeProfitMax ? fmt(leg.targetTakeProfitMax) : '—';
+    const roiStr = roi >= 0 ? `+${roi.toFixed(1)}%` : `${roi.toFixed(1)}%`;
+    const roiCls = roi >= 0 ? 'pnl-pos' : 'pnl-neg';
+    const tagCls = side.toLowerCase();
+    return `<tr>
+      <td style="color:var(--muted);font-size:11px">${id}</td>
+      <td><span class="tag ${tagCls}">${side}</span></td>
+      <td>${entry}</td>
+      <td>${qty}</td>
+      <td style="color:var(--red)">${sl}</td>
+      <td style="color:var(--green)">${tp}</td>
+      <td class="${roiCls}" style="font-weight:600">${roiStr}</td>
+      <td style="color:var(--muted)">${tpMax}</td>
+    </tr>`;
+  }).join('');
+}
+
+// ═══════════════════════════════════════════
+// Render: Config badges + form defaults
+// ═══════════════════════════════════════════
+function renderConfig(cfg) {
+  const allow      = cfg.allowtocreate        === true;
+  const allowLong  = cfg.allowtocreate_long   !== false;  // default true
+  const allowShort = cfg.allowtocreate_short  !== false;
+
+  setBadge('badge-allow',  allow,      'ON',        'OFF');
+  setBadge('badge-long',   allowLong,  'LONG ON',   'LONG OFF');
+  setBadge('badge-short',  allowShort, 'SHORT ON',  'SHORT OFF');
+
+  // Account stat-row: grid_step comes from trend, but also from config
+  if (cfg.grid_step) setTxt('stat-gridstep', cfg.grid_step);
+
+  // Config quick stats
+  setTxt('cfg-leg-sl',    cfg.leg_force_sl    ?? '—');
+  setTxt('cfg-leg-tp',    cfg.leg_force_tp    ?? '—');
+  setTxt('cfg-lev-long',  cfg.leverage_long   != null ? cfg.leverage_long  + 'x' : '—');
+  setTxt('cfg-lev-short', cfg.leverage_short  != null ? cfg.leverage_short + 'x' : '—');
+
+  // Pre-fill create form with current config values
+  if (cfg.position_qty)   document.getElementById('cr-qty').value  = cfg.position_qty;
+  if (cfg.leverage_long)  document.getElementById('cr-lev').value  = cfg.leverage_long;
+  if (cfg.leg_force_sl)   document.getElementById('cr-sl').value   = cfg.leg_force_sl;
+  if (cfg.leg_force_tp)   document.getElementById('cr-tp').value   = cfg.leg_force_tp;
+}
+
+function setBadge(id, on, labelOn, labelOff) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.textContent = on ? labelOn : labelOff;
+  el.className   = 'status-badge ' + (on ? 'sb-on' : 'sb-off');
+}
+
+// ═══════════════════════════════════════════
+// Render: Funding
+// ═══════════════════════════════════════════
+function renderFunding(d) {
+  setTxt('fund-rate',    d.funding_rate      != null ? (parseFloat(d.funding_rate)*100).toFixed(4)+'%' : '—');
+  setTxt('fund-daily',   d.funding_daily_est != null ? parseFloat(d.funding_daily_est).toFixed(4)+'%'  : '—');
+  setTxt('fund-mark',    d.funding_mark_price? fmt(d.funding_mark_price) : '—');
+  setTxt('fund-updated', d.funding_updated   || '—');
+
+  // Also populate balance from mark price area if we have it
+  if (d.funding_mark_price) {
+    // Mark price is available — could cross-reference with position data
+  }
+}
+
+// ═══════════════════════════════════════════
+// Render: Account balance
+// Binance account data may be in symbols/BTCUSDT or positions/BTCUSDT
+// ═══════════════════════════════════════════
+// We listen on positions/BTCUSDT for balance fields too
+// The bot stores totalWalletBalance, availableBalance there via updFbPositions
+const _origRenderPositions = renderPositions;
+function renderPositions(d) {
+  // Try account balance fields
+  const total = parseFloat(d.totalWalletBalance || d.totalwalletbalance || 0);
+  const avail = parseFloat(d.availableBalance   || d.availablebalance   || 0);
+  if (total > 0) {
+    setTxt('bal-total', '$' + total.toFixed(2));
+    const used = total - avail;
+    document.getElementById('bal-sub').textContent =
+      `Available $${avail.toFixed(2)}  ·  Used $${used.toFixed(2)}`;
+  }
+  _origRenderPositions(d);
+}
+
+// ═══════════════════════════════════════════
+// CTAs — Write to Firebase
+// ═══════════════════════════════════════════
+function ctaAllowCreate(val) {
+  db.ref('configmain/configgrid').update({ allowtocreate: val })
+    .then(() => toast(`✅ allowtocreate → ${val}`, 'ok'))
+    .catch(e => toast('Error: ' + e.message, 'err'));
+}
+
+function ctaAllowSide(side, val) {
+  const key = side === 'long' ? 'allowtocreate_long' : 'allowtocreate_short';
+  db.ref('configmain/configgrid').update({ [key]: val, allowtocreate: true })
+    .then(() => toast(`✅ ${key} → ${val}`, 'ok'))
+    .catch(e => toast('Error: ' + e.message, 'err'));
+}
+
+function ctaRebase() {
+  db.ref('configmain/configgrid').update({ allowRebaseLegs: true })
+    .then(() => toast('🔄 Rebase triggered', 'ok'))
+    .catch(e => toast('Error: ' + e.message, 'err'));
+}
+
+function ctaReport() {
+  toast('🔃 Refreshing…', 'ok');
+  // Firebase listeners auto-refresh; just show feedback
+}
+
+function ctaCreateLeg() {
+  const side = document.getElementById('cr-side').value;
+  const qty  = parseFloat(document.getElementById('cr-qty').value);
+  const lev  = parseInt(document.getElementById('cr-lev').value);
+  const sl   = parseFloat(document.getElementById('cr-sl').value);
+  const tp   = parseFloat(document.getElementById('cr-tp').value);
+
+  if (!qty || !lev) { toast('Fill in all fields', 'err'); return; }
+
+  const isLong  = side === 'LONG';
+  const updates = {
+    allowtocreate:             true,
+    allowtocreate_long:        isLong  ? true : undefined,
+    allowtocreate_short:       !isLong ? true : undefined,
+    position_qty:              qty,
+    leverage_long:             isLong  ? lev  : undefined,
+    leverage_short:            !isLong ? lev  : undefined,
+    leg_force_sl:              sl,
+    leg_force_tp:              tp,
+  };
+  // Remove undefined keys
+  Object.keys(updates).forEach(k => updates[k] === undefined && delete updates[k]);
+
+  const btn = document.getElementById('btn-exec');
+  btn.disabled = true;
+  db.ref('configmain/configgrid').update(updates)
+    .then(() => {
+      toast(`🚀 ${side} leg queued — bot creates on next loop`, 'ok');
+      btn.disabled = false;
+    })
+    .catch(e => {
+      toast('Error: ' + e.message, 'err');
+      btn.disabled = false;
+    });
+}
+
+// ═══════════════════════════════════════════
+// Helpers
+// ═══════════════════════════════════════════
+function setTxt(id, val) {
+  const el = document.getElementById(id);
+  if (el) el.textContent = val;
+}
+
+function fmt(n) {
+  const v = parseFloat(n);
+  if (!v) return '—';
+  return v.toLocaleString('en-US', {minimumFractionDigits:0, maximumFractionDigits:1});
+}
+
+let _toastTimer;
+function toast(msg, type='ok') {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.className = `toast ${type} show`;
+  clearTimeout(_toastTimer);
+  _toastTimer = setTimeout(() => el.classList.remove('show'), 3000);
+}
+
+function scrollTo(id) {
+  document.querySelector(id)?.scrollIntoView({behavior:'smooth',block:'start'});
+}
+</script>
+</body>
+</html>
