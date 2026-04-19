@@ -656,24 +656,16 @@ function setDot(name, online) {
 // ═══════════════════════════════════════════
 function renderPositions(d) {
   const body = document.getElementById('positions-body');
-  // Bot stores positions with LONG / SHORT as top-level keys under positions/BTCUSDT
-  // Each has: positionAmt, entryPrice, unRealizedProfit, liquidationPrice, leverage
-  const sides = ['LONG', 'SHORT'];
+  // Bot stores flat keys: entry_price_long, pnl_long, qty_long, leverage_long (and _short)
   let html = '';
   let totalUpnl = 0;
 
-  sides.forEach(side => {
-    const p = d[side];
-    if (!p) return;
-    const amt  = parseFloat(p.positionAmt  || p.positionamt  || 0);
-    if (Math.abs(amt) < 0.0001) return;
-
-    const entry = fmt(p.entryPrice || p.entryprice || 0);
-    const liq   = fmt(p.liquidationPrice || p.liquidationprice || 0);
-    const upnl  = parseFloat(p.unRealizedProfit || p.unrealizedprofit || 0);
-    const mark  = parseFloat(p.markPrice || p.markprice || 0);
-    const lev   = p.leverage || '—';
-    const qty   = Math.abs(amt).toFixed(4);
+  [['LONG','_long'], ['SHORT','_short']].forEach(([label, sfx]) => {
+    const qty   = parseFloat(d[`qty${sfx}`]         || 0);
+    if (qty < 0.0001) return;
+    const entry = fmt(d[`entry_price${sfx}`]        || 0);
+    const upnl  = parseFloat(d[`pnl${sfx}`]         || 0);
+    const lev   = d[`leverage${sfx}`]               || '—';
 
     totalUpnl += upnl;
     const roiAmt = upnl >= 0 ? `+$${upnl.toFixed(2)}` : `-$${Math.abs(upnl).toFixed(2)}`;
@@ -681,24 +673,24 @@ function renderPositions(d) {
 
     html += `
       <div class="pos-row">
-        <span class="tag ${side.toLowerCase()}">${side}</span>
+        <span class="tag ${label.toLowerCase()}">${label}</span>
         <span class="pos-meta">Entry <b>${entry}</b></span>
-        <span class="pos-meta">Qty <b>${qty}</b></span>
+        <span class="pos-meta">Qty <b>${qty.toFixed(4)}</b></span>
         <span class="${cls}" style="font-weight:600">${roiAmt}</span>
-        <span class="pos-meta">Liq <b style="color:var(--red)">${liq}</b></span>
-        <span class="pos-meta" style="color:var(--muted)">${lev}x</span>
+        <span class="pos-meta" style="color:var(--muted)">${lev}x lev</span>
       </div>`;
   });
 
   if (!html) {
     html = '<div class="pos-empty">No open positions</div>';
   } else {
-    const cls = totalUpnl >= 0 ? 'pnl-pos' : 'pnl-neg';
-    const sign = totalUpnl >= 0 ? '+' : '';
+    const totalPnl = parseFloat(d.pnl_total || totalUpnl);
+    const cls  = totalPnl >= 0 ? 'pnl-pos' : 'pnl-neg';
+    const sign = totalPnl >= 0 ? '+' : '';
     html += `
       <div class="pos-totals">
         <div class="pt"><div class="l">Total uPNL</div>
-          <div class="v ${cls}">${sign}$${totalUpnl.toFixed(2)}</div></div>
+          <div class="v ${cls}">${sign}$${totalPnl.toFixed(2)}</div></div>
       </div>`;
   }
   body.innerHTML = html;
@@ -805,21 +797,20 @@ function renderFunding(d) {
 // ═══════════════════════════════════════════
 // Render: Account balance
 // Binance account data may be in symbols/BTCUSDT or positions/BTCUSDT
-// ═══════════════════════════════════════════
-// We listen on positions/BTCUSDT for balance fields too
-// The bot stores totalWalletBalance, availableBalance there via updFbPositions
-const _origRenderPositions = renderPositions;
-function renderPositions(d) {
-  // Try account balance fields
-  const total = parseFloat(d.totalWalletBalance || d.totalwalletbalance || 0);
-  const avail = parseFloat(d.availableBalance   || d.availablebalance   || 0);
-  if (total > 0) {
-    setTxt('bal-total', '$' + total.toFixed(2));
-    const used = total - avail;
+// Balance: derive from positions data (qty * mark price / leverage = margin used)
+function updateBalanceFromPositions(d) {
+  const qtyL  = parseFloat(d.qty_long   || 0);
+  const qtyS  = parseFloat(d.qty_short  || 0);
+  const mark  = parseFloat(d.funding_mark_price || 0);  // from trend node
+  const levL  = parseFloat(d.leverage_long  || 1);
+  const levS  = parseFloat(d.leverage_short || 1);
+  const marginL = mark > 0 ? (qtyL * mark) / levL : 0;
+  const marginS = mark > 0 ? (qtyS * mark) / levS : 0;
+  const used  = marginL + marginS;
+  if (used > 0) {
     document.getElementById('bal-sub').textContent =
-      `Available $${avail.toFixed(2)}  ·  Used $${used.toFixed(2)}`;
+      `Margin used ~$${used.toFixed(2)}`;
   }
-  _origRenderPositions(d);
 }
 
 // ═══════════════════════════════════════════
