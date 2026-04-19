@@ -404,19 +404,38 @@ tr:last-child td{border:none}
     <!-- ── Create Leg ── -->
     <div class="card" id="create-card">
       <div class="card-title">Create Leg</div>
+
+      <!-- Mode toggle -->
+      <div style="display:flex;gap:6px;margin-bottom:12px">
+        <button id="mode-usdt" class="btn active-on" style="flex:1;font-size:11px" onclick="setCreateMode('usdt')">USDT Mode</button>
+        <button id="mode-btc"  class="btn"           style="flex:1;font-size:11px" onclick="setCreateMode('btc')">BTC Qty Mode</button>
+      </div>
+
       <div class="form-grid">
         <div class="fld" style="grid-column:1/-1">
           <label>Side</label>
           <select id="cr-side"><option value="LONG">LONG</option><option value="SHORT">SHORT</option></select>
         </div>
-        <div class="fld"><label>Qty (BTC)</label><input type="number" id="cr-qty" value="0.002" step="0.001" min="0.001"></div>
+
+        <!-- USDT mode fields -->
+        <div class="fld" id="fld-usdt"><label>Margin USDT</label><input type="number" id="cr-usdt" value="25" step="5" min="1"></div>
+
+        <!-- BTC qty mode fields (hidden by default) -->
+        <div class="fld" id="fld-qty" style="display:none"><label>Qty (BTC)</label><input type="number" id="cr-qty" value="0.002" step="0.001" min="0.001"></div>
+
         <div class="fld"><label>Leverage</label><input type="number" id="cr-lev" value="15" min="1" max="25"></div>
         <div class="fld"><label>SL %</label><input type="number" id="cr-sl" value="-8" step="0.5"></div>
         <div class="fld"><label>TP %</label><input type="number" id="cr-tp" value="3.5" step="0.25"></div>
       </div>
+
+      <!-- USDT mode: show derived qty estimate -->
+      <div id="qty-estimate" style="margin:8px 0;padding:7px 10px;background:#0d1117;border:1px solid var(--border);border-radius:6px;font-size:11px;color:var(--muted)">
+        Est. qty: — BTC &nbsp;·&nbsp; Notional: — USDT
+      </div>
+
       <button class="btn-exec" id="btn-exec" onclick="ctaCreateLeg()">🚀 Execute Create Leg</button>
-      <div style="margin-top:8px;font-size:10px;color:var(--muted)">
-        Updates config values, then enables creation for the selected side. Bot creates on next loop.
+      <div style="margin-top:8px;font-size:10px;color:var(--muted)" id="create-hint">
+        USDT mode: bot auto-calculates BTC qty each time (margin × leverage ÷ price). Updates config, enables side.
       </div>
     </div>
 
@@ -778,7 +797,13 @@ function renderConfig(cfg) {
   setTxt('cfg-lev-short', cfg.leverage_short  != null ? cfg.leverage_short + 'x' : '—');
 
   // Pre-fill create form with current config values
-  if (cfg.position_qty)   document.getElementById('cr-qty').value  = cfg.position_qty;
+  if (cfg.position_usdt != null && cfg.position_usdt > 0) {
+    setCreateMode('usdt');
+    document.getElementById('cr-usdt').value = cfg.position_usdt;
+  } else if (cfg.position_qty) {
+    setCreateMode('btc');
+    document.getElementById('cr-qty').value  = cfg.position_qty;
+  }
   if (cfg.leverage_long)  document.getElementById('cr-lev').value  = cfg.leverage_long;
   if (cfg.leg_force_sl)   document.getElementById('cr-sl').value   = cfg.leg_force_sl;
   if (cfg.leg_force_tp)   document.getElementById('cr-tp').value   = cfg.leg_force_tp;
@@ -852,34 +877,89 @@ function ctaReport() {
   // Firebase listeners auto-refresh; just show feedback
 }
 
+// ── Create mode toggle ──────────────────────
+let _createMode = 'usdt';  // 'usdt' or 'btc'
+
+function setCreateMode(mode) {
+  _createMode = mode;
+  document.getElementById('fld-usdt').style.display = mode === 'usdt' ? '' : 'none';
+  document.getElementById('fld-qty').style.display  = mode === 'btc'  ? '' : 'none';
+  document.getElementById('qty-estimate').style.display = mode === 'usdt' ? '' : 'none';
+  document.getElementById('mode-usdt').className = 'btn ' + (mode === 'usdt' ? 'active-on' : '');
+  document.getElementById('mode-btc').className  = 'btn ' + (mode === 'btc'  ? 'active-on' : '');
+  document.getElementById('create-hint').textContent = mode === 'usdt'
+    ? 'USDT mode: bot auto-calculates BTC qty each time (margin \u00d7 leverage \u00f7 price). Updates config, enables side.'
+    : 'BTC qty mode: sets position_qty directly. Bot uses this fixed qty per leg.';
+  updateQtyEstimate();
+}
+
+function updateQtyEstimate() {
+  if (_createMode !== 'usdt') return;
+  const usdt = parseFloat(document.getElementById('cr-usdt').value) || 0;
+  const lev  = parseInt(document.getElementById('cr-lev').value)    || 15;
+  // Use mark price from funding if available
+  const markEl = document.getElementById('fund-mark');
+  const markTxt = markEl ? markEl.textContent.replace(/[^0-9.]/g,'') : '';
+  const mark = parseFloat(markTxt) || 0;
+  const el = document.getElementById('qty-estimate');
+  if (!el) return;
+  if (mark > 0 && usdt > 0) {
+    const qty = ((usdt * lev) / mark).toFixed(5);
+    const notional = (usdt * lev).toFixed(0);
+    el.textContent = `Est. qty: ${qty} BTC  \u00b7  Notional: $${notional}  \u00b7  at $${Math.round(mark).toLocaleString()}`;
+    el.style.color = parseFloat(qty) >= 0.001 ? 'var(--green)' : 'var(--yellow)';
+  } else {
+    el.textContent = 'Est. qty: — BTC  \u00b7  Notional: — USDT  (price not loaded yet)';
+    el.style.color = 'var(--muted)';
+  }
+}
+
+// Recalculate estimate when inputs change
+['cr-usdt','cr-lev'].forEach(id => {
+  document.getElementById(id)?.addEventListener('input', updateQtyEstimate);
+});
+
 function ctaCreateLeg() {
-  const side = document.getElementById('cr-side').value;
-  const qty  = parseFloat(document.getElementById('cr-qty').value);
-  const lev  = parseInt(document.getElementById('cr-lev').value);
-  const sl   = parseFloat(document.getElementById('cr-sl').value);
-  const tp   = parseFloat(document.getElementById('cr-tp').value);
+  const side   = document.getElementById('cr-side').value;
+  const lev    = parseInt(document.getElementById('cr-lev').value);
+  const sl     = parseFloat(document.getElementById('cr-sl').value);
+  const tp     = parseFloat(document.getElementById('cr-tp').value);
+  const isLong = side === 'LONG';
 
-  if (!qty || !lev) { toast('Fill in all fields', 'err'); return; }
+  if (!lev) { toast('Fill in all fields', 'err'); return; }
 
-  const isLong  = side === 'LONG';
   const updates = {
-    allowtocreate:             true,
-    allowtocreate_long:        isLong  ? true : undefined,
-    allowtocreate_short:       !isLong ? true : undefined,
-    position_qty:              qty,
-    leverage_long:             isLong  ? lev  : undefined,
-    leverage_short:            !isLong ? lev  : undefined,
-    leg_force_sl:              sl,
-    leg_force_tp:              tp,
+    allowtocreate:       true,
+    allowtocreate_long:  isLong  ? true : undefined,
+    allowtocreate_short: !isLong ? true : undefined,
+    leverage_long:       isLong  ? lev  : undefined,
+    leverage_short:      !isLong ? lev  : undefined,
+    leg_force_sl:        sl,
+    leg_force_tp:        tp,
   };
-  // Remove undefined keys
+
+  if (_createMode === 'usdt') {
+    const usdt = parseFloat(document.getElementById('cr-usdt').value);
+    if (!usdt) { toast('Enter USDT margin amount', 'err'); return; }
+    updates.position_usdt = usdt;
+    updates.position_qty  = null;  // clear fixed qty so bot uses USDT mode
+  } else {
+    const qty = parseFloat(document.getElementById('cr-qty').value);
+    if (!qty) { toast('Enter BTC qty', 'err'); return; }
+    updates.position_qty  = qty;
+    updates.position_usdt = null;  // clear USDT mode
+  }
+
   Object.keys(updates).forEach(k => updates[k] === undefined && delete updates[k]);
 
   const btn = document.getElementById('btn-exec');
   btn.disabled = true;
   db.ref('configmain/configgrid').update(updates)
     .then(() => {
-      toast(`🚀 ${side} leg queued — bot creates on next loop`, 'ok');
+      const modeStr = _createMode === 'usdt'
+        ? `$${updates.position_usdt} USDT margin x ${lev}x`
+        : `${updates.position_qty} BTC`;
+      toast(`🚀 ${side} leg queued [${modeStr}] — bot creates on next loop`, 'ok');
       btn.disabled = false;
     })
     .catch(e => {
