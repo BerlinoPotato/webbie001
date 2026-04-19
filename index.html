@@ -655,14 +655,26 @@ function setDot(name, online) {
 // Render: Positions
 // ═══════════════════════════════════════════
 function renderPositions(d) {
+  // Wallet balance (written by bot after this fix)
+  const walBal = d.wallet_balance    != null ? parseFloat(d.wallet_balance)    : null;
+  const avail  = d.available_balance != null ? parseFloat(d.available_balance) : null;
+  const used   = d.used_margin       != null ? parseFloat(d.used_margin)       : null;
+  if (walBal != null) {
+    setTxt('bal-total', `$${walBal.toFixed(2)}`);
+    const availStr = avail != null ? `$${avail.toFixed(2)}` : '—';
+    const usedStr  = used  != null ? `$${used.toFixed(2)}`  : '—';
+    setTxt('bal-sub', `Available ${availStr} &nbsp;·&nbsp; Margin ${usedStr}`);
+  }
+
   const body = document.getElementById('positions-body');
-  // Bot stores flat keys: entry_price_long, pnl_long, qty_long, leverage_long (and _short)
   let html = '';
   let totalUpnl = 0;
+  let hasPos = false;
 
   [['LONG','_long'], ['SHORT','_short']].forEach(([label, sfx]) => {
     const qty   = parseFloat(d[`qty${sfx}`]         || 0);
     if (qty < 0.0001) return;
+    hasPos = true;
     const entry = fmt(d[`entry_price${sfx}`]        || 0);
     const upnl  = parseFloat(d[`pnl${sfx}`]         || 0);
     const lev   = d[`leverage${sfx}`]               || '—';
@@ -681,16 +693,16 @@ function renderPositions(d) {
       </div>`;
   });
 
-  if (!html) {
+  if (!hasPos) {
     html = '<div class="pos-empty">No open positions</div>';
   } else {
-    const totalPnl = parseFloat(d.pnl_total || totalUpnl);
-    const cls  = totalPnl >= 0 ? 'pnl-pos' : 'pnl-neg';
-    const sign = totalPnl >= 0 ? '+' : '';
+    // Use locally-computed sum (avoids stale pnl_total in Firebase)
+    const cls  = totalUpnl >= 0 ? 'pnl-pos' : 'pnl-neg';
+    const sign = totalUpnl >= 0 ? '+' : '';
     html += `
       <div class="pos-totals">
         <div class="pt"><div class="l">Total uPNL</div>
-          <div class="v ${cls}">${sign}$${totalPnl.toFixed(2)}</div></div>
+          <div class="v ${cls}">${sign}$${totalUpnl.toFixed(2)}</div></div>
       </div>`;
   }
   body.innerHTML = html;
